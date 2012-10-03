@@ -1,0 +1,100 @@
+// Frag shader Phong Shading - Per-pixel lighting
+
+precision highp float;
+
+// texture variables
+uniform sampler2D shadowTexture; // depth texture
+uniform sampler2D texture1; // color texture
+
+
+varying float tex;
+varying vec2 tCoord;
+
+varying vec3 vNormal;
+varying vec3 EyespaceNormal;
+
+// light
+uniform vec4 lightPos;
+uniform vec4 lightColor;
+
+// shadow projection matrix
+uniform mat4 shadowProjMatrix;
+
+// material
+uniform vec4 matAmbient;
+uniform vec4 matDiffuse;
+uniform vec4 matSpecular;
+uniform float matShininess;
+
+// eye pos
+uniform vec3 eyePos;
+
+// from vertex s
+varying vec3 lightDir, eyeVec;
+
+// shadow coordinates
+varying vec4 shadowCoord;
+
+
+float getShadowFactor(vec4 lightZ)
+{
+	vec4 packedZValue = texture2D(shadowTexture, lightZ.st);
+
+	// unpack
+	const vec4 bitShifts = vec4(1.0 / (256.0 * 256.0 * 256.0),
+								1.0 / (256.0 * 256.0),
+								1.0 / 256.0,
+								1);
+	float shadow = dot(packedZValue , bitShifts);
+
+	return float(shadow > lightZ.z);
+}
+
+void main() {
+	// Just to show them being used
+	//vec4 a = lightPos;
+    vec4 b = lightColor;
+    vec4 c = matAmbient;
+    vec4 d = matDiffuse;
+    vec4 e = matSpecular;
+    vec3 g = eyePos;
+    float f = matShininess;
+	
+	vec3 N = normalize(EyespaceNormal);
+    vec3 E = normalize(eyeVec); 
+    
+    vec3 L = normalize(lightDir);
+    
+    // Reflect the vector. Use this or reflect(incidentV, N);
+    vec3 reflectV = reflect(-L, N);
+    
+    // Get lighting terms
+    vec4 ambientTerm;
+   	if (tex >= 1.0) {
+    	ambientTerm = texture2D(texture1, tCoord);
+    }
+    else
+        ambientTerm = matAmbient * lightColor;
+    	
+    vec4 diffuseTerm = matDiffuse * max(dot(N, L), 0.0);
+    vec4 specularTerm = matSpecular * pow(max(dot(reflectV, E), 0.0), matShininess);
+   
+   
+   	// Shadow
+   	float sValue = 1.0;
+   	float sValue2 = 1.0;
+   	if (shadowCoord.w > 0.0) {
+   		vec4 lightZ = shadowCoord / shadowCoord.w;
+		lightZ = (lightZ + 1.0) /2.0;
+		
+		sValue = getShadowFactor(lightZ);
+		
+		// scale the value from 0.5-1.0 to get a "softer" shadow for ambient
+		float newMin = 0.5;
+		float v1 = (1.0)/(1.0 - newMin);
+		float v2 = sValue/v1;
+		sValue2 = sValue + newMin;//v2 + newMin;
+	}
+   
+    gl_FragColor =  ( ambientTerm * sValue2 + (diffuseTerm + specularTerm) * sValue) ;
+}
